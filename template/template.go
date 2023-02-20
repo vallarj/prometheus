@@ -182,7 +182,17 @@ func resolveTemplateExpanderConfigPath() (string, bool) {
 	flagPath := a.Flag(ExpanderConfigFlagName, "").String()
 	a.HelpFlag = nil
 
-	a.Parse(os.Args[1:])
+	// Rebuild args before parsing
+	// Find if config flag name is in args
+	args := make([]string, 0)
+	for i, arg := range os.Args {
+		if strings.Index(arg, ExpanderConfigFlagName) > 0 {
+			args = os.Args[i : i+2]
+			break
+		}
+	}
+
+	a.Parse(args)
 	*flagPath = strings.TrimSpace(*flagPath)
 
 	if *flagPath == "" {
