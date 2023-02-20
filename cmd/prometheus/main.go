@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/prometheus/prometheus/template"
 	"math"
 	"math/bits"
 	"net"
@@ -234,8 +235,8 @@ func main() {
 	a.Flag("config.file", "Prometheus configuration file path.").
 		Default("prometheus.yml").StringVar(&cfg.configFile)
 
-	a.Flag("config.template-expander", "Template expander custom config file.").
-		Default("template_expander.yml").String()
+	a.Flag(template.ExpanderConfigFlagName, "Template expander custom config file.").
+		Default(template.DefaultExpanderConfigFilename).String()
 
 	a.Flag("web.listen-address", "Address to listen on for UI, API, and telemetry.").
 		Default("0.0.0.0:9090").StringVar(&cfg.web.ListenAddress)

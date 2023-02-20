@@ -123,7 +123,8 @@ func convertToFloat(i interface{}) (float64, error) {
 	}
 }
 
-const defaultExpanderConfigFilename = "template_expander.yml"
+const ExpanderConfigFlagName = "config.template-expander"
+const DefaultExpanderConfigFilename = "template_expander.yml"
 
 type expanderConfig struct {
 	ReplacerFunctions map[string]replacerFunctionConfig `yaml:"replacer_functions"`
@@ -132,13 +133,19 @@ type expanderConfig struct {
 type replacerFunctionConfig map[string]string
 
 func loadExpanderConfig() expanderConfig {
-	configPath := resolveTemplateExpanderConfigPath()
+	configPath, usingDefaultPath := resolveTemplateExpanderConfigPath()
 	content, err := os.ReadFile(configPath)
 
+	fmt.Println(configPath, usingDefaultPath)
 	if err != nil {
 		// No configuration file found. Return empty funcMap
-		return expanderConfig{
-			ReplacerFunctions: make(map[string]replacerFunctionConfig),
+		if usingDefaultPath {
+			return expanderConfig{
+				ReplacerFunctions: make(map[string]replacerFunctionConfig),
+			}
+		} else {
+			fmt.Printf("Error: Specified config.template-expander file %s not found. \n", configPath)
+			os.Exit(1)
 		}
 	}
 
@@ -170,30 +177,27 @@ func loadCustomExpanderFuncs() text_template.FuncMap {
 	return funcMap
 }
 
-func resolveTemplateExpanderConfigPath() string {
+func resolveTemplateExpanderConfigPath() (string, bool) {
 	// Get text_template expander file path
 	a := kingpin.New(filepath.Base(os.Args[0]), "").UsageWriter(io.Discard)
-	flagPath := a.Flag("config.text_template-expander", "").String()
+	flagPath := a.Flag(ExpanderConfigFlagName, "").String()
 	a.HelpFlag = nil
 
 	a.Parse(os.Args[1:])
 	*flagPath = strings.TrimSpace(*flagPath)
 
-	var configPath string
 	if *flagPath == "" {
 		// Get default expander config file path
 		ex, err := os.Executable()
 		if err != nil {
 			// Try current working directory
-			configPath = defaultExpanderConfigFilename
+			return DefaultExpanderConfigFilename, true
 		} else {
-			configPath = filepath.Join(filepath.Dir(ex), defaultExpanderConfigFilename)
+			return filepath.Join(filepath.Dir(ex), DefaultExpanderConfigFilename), true
 		}
 	} else {
-		configPath = *flagPath
+		return *flagPath, false
 	}
-
-	return configPath
 }
 
 func replaceExactFunc(text string, replaceMap map[string]string) string {
