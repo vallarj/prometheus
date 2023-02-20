@@ -136,7 +136,6 @@ func loadExpanderConfig() expanderConfig {
 	configPath, usingDefaultPath := resolveTemplateExpanderConfigPath()
 	content, err := os.ReadFile(configPath)
 
-	fmt.Println(configPath, usingDefaultPath)
 	if err != nil {
 		// No configuration file found. Return empty funcMap
 		if usingDefaultPath {
