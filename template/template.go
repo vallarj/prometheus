@@ -18,10 +18,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/yaml.v2"
 	html_template "html/template"
+	"io"
 	"math"
 	"net"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -118,6 +123,87 @@ func convertToFloat(i interface{}) (float64, error) {
 	}
 }
 
+const defaultExpanderConfigFilename = "template_expander.yml"
+
+type expanderConfig struct {
+	ReplacerFunctions map[string]replacerFunctionConfig `yaml:"replacer_functions"`
+}
+
+type replacerFunctionConfig map[string]string
+
+func loadExpanderConfig() expanderConfig {
+	configPath := resolveTemplateExpanderConfigPath()
+	content, err := os.ReadFile(configPath)
+
+	if err != nil {
+		// No configuration file found. Return empty funcMap
+		return expanderConfig{
+			ReplacerFunctions: make(map[string]replacerFunctionConfig),
+		}
+	}
+
+	cfg := expanderConfig{}
+	err = yaml.UnmarshalStrict(content, &cfg)
+	if err != nil {
+		fmt.Printf("Error %s\n", fmt.Errorf("parsing template expander configuration: %s: %w", configPath, err))
+		os.Exit(1)
+	}
+
+	return cfg
+}
+
+var (
+	customExpanderFuncs = loadCustomExpanderFuncs()
+)
+
+func loadCustomExpanderFuncs() text_template.FuncMap {
+	cfg := loadExpanderConfig()
+
+	funcMap := text_template.FuncMap{}
+	for funcName, _ := range cfg.ReplacerFunctions {
+		replaceWords := cfg.ReplacerFunctions[funcName]
+		funcMap[funcName] = func(text string) string {
+			return replaceExactFunc(text, replaceWords)
+		}
+	}
+
+	return funcMap
+}
+
+func resolveTemplateExpanderConfigPath() string {
+	// Get text_template expander file path
+	a := kingpin.New(filepath.Base(os.Args[0]), "").UsageWriter(io.Discard)
+	flagPath := a.Flag("config.text_template-expander", "").String()
+	a.HelpFlag = nil
+
+	a.Parse(os.Args[1:])
+	*flagPath = strings.TrimSpace(*flagPath)
+
+	var configPath string
+	if *flagPath == "" {
+		// Get default expander config file path
+		ex, err := os.Executable()
+		if err != nil {
+			// Try current working directory
+			configPath = defaultExpanderConfigFilename
+		} else {
+			configPath = filepath.Join(filepath.Dir(ex), defaultExpanderConfigFilename)
+		}
+	} else {
+		configPath = *flagPath
+	}
+
+	return configPath
+}
+
+func replaceExactFunc(text string, replaceMap map[string]string) string {
+	if replacement, ok := replaceMap[text]; ok {
+		return replacement
+	}
+
+	return text
+}
+
 // Expander executes templates in text or HTML mode with a common set of Prometheus template functions.
 type Expander struct {
 	text    string
@@ -141,7 +227,7 @@ func NewTemplateExpander(
 	if options == nil {
 		options = []string{"missingkey=zero"}
 	}
-	return &Expander{
+	expander := &Expander{
 		text: text,
 		name: name,
 		data: data,
@@ -341,6 +427,18 @@ func NewTemplateExpander(
 		},
 		options: options,
 	}
+
+	for funcName, f := range customExpanderFuncs {
+		// Check if function exists in builtins
+		if _, ok := expander.funcMap[funcName]; ok {
+			// Function is a builtin, skip
+			continue
+		}
+
+		expander.funcMap[funcName] = f
+	}
+
+	return expander
 }
 
 // AlertTemplateData returns the interface to be used in expanding the template.
