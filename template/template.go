@@ -18,10 +18,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
 	html_template "html/template"
-	"io"
 	"math"
 	"net"
 	"net/url"
@@ -177,25 +175,18 @@ func loadCustomExpanderFuncs() text_template.FuncMap {
 }
 
 func resolveTemplateExpanderConfigPath() (string, bool) {
-	// Get text_template expander file path
-	a := kingpin.New(filepath.Base(os.Args[0]), "").UsageWriter(io.Discard)
-	flagPath := a.Flag(ExpanderConfigFlagName, "").String()
-	a.HelpFlag = nil
-
-	// Rebuild args before parsing
-	// Find if config flag name is in args
-	args := make([]string, 0)
+	flagPath := ""
+	// Find if expander config flag exists in args
+	// This should have been already checked and sanitized by
+	// the main package kingpin so no need to reparse here
 	for i, arg := range os.Args {
 		if strings.Index(arg, ExpanderConfigFlagName) > 0 {
-			args = os.Args[i : i+2]
+			flagPath = strings.TrimSpace(os.Args[i+1])
 			break
 		}
 	}
 
-	a.Parse(args)
-	*flagPath = strings.TrimSpace(*flagPath)
-
-	if *flagPath == "" {
+	if flagPath == "" {
 		// Get default expander config file path
 		ex, err := os.Executable()
 		if err != nil {
@@ -205,7 +196,8 @@ func resolveTemplateExpanderConfigPath() (string, bool) {
 			return filepath.Join(filepath.Dir(ex), DefaultExpanderConfigFilename), true
 		}
 	} else {
-		return *flagPath, false
+		// Custom flag path provided by user
+		return flagPath, false
 	}
 }
 
